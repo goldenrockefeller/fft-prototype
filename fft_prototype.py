@@ -127,12 +127,7 @@ class Myfft:
         self.twiddles = []
         subfft_len = 1
 
-        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
-            subtwiddle_len = subfft_len
-            subfft_len *= 2
-            self.twiddles.append (
-                np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j)
-            )
+
         for butterfly_id in range(self.n_radix_4_butterflies):
             subtwiddle_len = subfft_len
             subfft_len *= 4
@@ -144,60 +139,27 @@ class Myfft:
                 ))
             )
 
+        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
+            subtwiddle_len = subfft_len
+            subfft_len *= 2
+            self.twiddles.append (
+                np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j)
+            )
+
 
         self.scrambled_indexes = scrambled_indexes(signal_len)
         self.signal_len = signal_len
 
-    def process(self, signal):
+    def process(self, signal, calculating_inverse = False):
+        if calculating_inverse:
+            signal = np.conjugate(signal) / len(signal)
+
         work_signal_a = scrambled_signal(self.scrambled_indexes, signal)
         work_signal_b = work_signal_a.copy()
-
-        # Forward or backward conjugation
 
         subfft_len = 1
         n_subfft_len = self.signal_len
         twiddle_id = 0
-
-        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
-            subtwiddle_len = subfft_len
-            subfft_len *= 2
-            n_subfft_len //= 2
-
-            a_id = 0
-            b_id = subtwiddle_len
-
-
-            for subfft_id in range(n_subfft_len): #range(1) for last butterfly
-                # Multiply in place
-                twiddle_start_id =  subfft_id*subfft_len + subtwiddle_len
-                end_id =   subfft_id*subfft_len + 2 * subtwiddle_len
-                work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
-
-                for i in range(subtwiddle_len):
-
-                    # First butterfly.
-                    work_signal_b[a_id] = (
-                        work_signal_a[a_id]
-                        + work_signal_a[b_id]
-                    )
-
-                    work_signal_b[b_id] = (
-                        work_signal_a[a_id]
-                        - work_signal_a[b_id]
-                    )
-
-                    work_signal_a[a_id] = work_signal_b[a_id]
-                    work_signal_a[b_id] = work_signal_b[b_id]
-
-
-                    a_id += 1
-                    b_id += 1
-
-                a_id += subfft_len - subtwiddle_len
-                b_id += subfft_len - subtwiddle_len
-
-            twiddle_id += 1
-
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             subtwiddle_len = subfft_len
@@ -271,77 +233,75 @@ class Myfft:
 
             twiddle_id += 1
 
-
         #end for
 
+        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
+            subtwiddle_len = subfft_len
+            subfft_len *= 2
+            n_subfft_len //= 2
+
+            a_id = 0
+            b_id = subtwiddle_len
 
 
+            # Multiply in place
+            twiddle_start_id =  subtwiddle_len
+            end_id =   2 * subtwiddle_len
+            work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
 
-            # # This code does the same thing and maybe a little easier to
-            # # understand
-            # #
-            # for subfft_id in range(self.signal_len//subfft_len):
-            #     subtwiddle_len = 4 ** (butterfly_id)
-            #
-            #     a_id = subfft_id*subfft_len
-            #
-            #     b_id = subfft_id*subfft_len + subtwiddle_len
-            #
-            #     c_id = subfft_id*subfft_len + 2 * subtwiddle_len
-            #
-            #     d_id = subfft_id*subfft_len + 3 * subtwiddle_len
-            #
-            #     end_id = subfft_id*subfft_len + 4 * subtwiddle_len
-            #
+            for i in range(subtwiddle_len):
+
+                # First butterfly.
+                work_signal_b[a_id] = (
+                    work_signal_a[a_id]
+                    + work_signal_a[b_id]
+                )
+
+                work_signal_b[b_id] = (
+                    work_signal_a[a_id]
+                    - work_signal_a[b_id]
+                )
+
+                work_signal_a[a_id] = work_signal_b[a_id]
+                work_signal_a[b_id] = work_signal_b[b_id]
+
+
+                a_id += 1
+                b_id += 1
+
+            # for subfft_id in range(n_subfft_len): #range(1) for last butterfly
             #     # Multiply in place
-            #     work_signal_a[b_id : end_id] *= self.twiddles[butterfly_id]
+            #     twiddle_start_id =  subfft_id*subfft_len + subtwiddle_len
+            #     end_id =   subfft_id*subfft_len + 2 * subtwiddle_len
+            #     work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
+            #
+            #     for i in range(subtwiddle_len):
+            #
+            #         # First butterfly.
+            #         work_signal_b[a_id] = (
+            #             work_signal_a[a_id]
+            #             + work_signal_a[b_id]
+            #         )
+            #
+            #         work_signal_b[b_id] = (
+            #             work_signal_a[a_id]
+            #             - work_signal_a[b_id]
+            #         )
+            #
+            #         work_signal_a[a_id] = work_signal_b[a_id]
+            #         work_signal_a[b_id] = work_signal_b[b_id]
             #
             #
-            #     # First butterfly.
-            #     work_signal_b[a_id : b_id] = (
-            #         work_signal_a[a_id : b_id]
-            #         + work_signal_a[b_id : c_id]
-            #     )
+            #         a_id += 1
+            #         b_id += 1
             #
-            #     work_signal_b[b_id : c_id] = (
-            #         work_signal_a[a_id : b_id]
-            #         - work_signal_a[b_id : c_id]
-            #     )
+            #     a_id += subfft_len - subtwiddle_len
+            #     b_id += subfft_len - subtwiddle_len
             #
-            #     work_signal_b[c_id : d_id] = (
-            #         work_signal_a[c_id : d_id]
-            #         + work_signal_a[d_id : end_id]
-            #     )
-            #
-            #     work_signal_b[d_id : end_id] = (
-            #         work_signal_a[c_id : d_id]
-            #         - work_signal_a[d_id : end_id]
-            #     )
-            #
-            #
-            #     # Second butterfly.
-            #     work_signal_a[a_id : b_id] = (
-            #         work_signal_b[a_id : b_id]
-            #         + work_signal_b[c_id : d_id]
-            #     )
-            #
-            #     work_signal_a[b_id : c_id] = (
-            #         work_signal_b[b_id : c_id]
-            #         - 1j * work_signal_b[d_id : end_id]
-            #     )
-            #
-            #     work_signal_a[c_id : d_id] = (
-            #         work_signal_b[a_id : b_id]
-            #         - work_signal_b[c_id : d_id]
-            #     )
-            #
-            #     work_signal_a[d_id : end_id] = (
-            #         work_signal_b[b_id : c_id]
-            #         + 1j * work_signal_b[d_id : end_id]
-            #     )
+            # twiddle_id += 1
 
-
-        # Forward or backward conjugation
+        if calculating_inverse:
+            work_signal_a = np.conjugate(work_signal_a)
 
         return work_signal_a
 
