@@ -120,17 +120,29 @@ def dft(signal):
 
 
 class Myfft:
-    def __init__(self, signal_len):
-        self.n_radix_4_butterflies = int(np.log2(signal_len)) // 2
-        self.n_radix_2_butterflies = int(np.log2(signal_len))
+    def __init__(self, signal_len, dft_len = 1):
+        self.n_radix_4_butterflies = int(np.log2(signal_len/dft_len)) // 2
+        self.n_radix_2_butterflies = int(np.log2(signal_len/dft_len))
+        self.using_final_radix_2_butterflies = (
+            2 * self.n_radix_4_butterflies != self.n_radix_2_butterflies
+        )
 
         self.twiddles = []
-        subfft_len = 1
+        subtwiddle_len = dft_len
+
+        self.dft_len = dft_len
+
+        self.dft_mat = []
+        self.dft_scrambled_indexes = scrambled_indexes(dft_len)
+
+        for dft_basis_id in range(dft_len):
+            dft_factor = self.dft_scrambled_indexes[dft_basis_id]
+            self.dft_mat.append(
+                np.exp(np.arange(0, dft_len, dtype=complex) * 2 * np.pi * dft_factor / dft_len * -1j),
+            )
 
 
         for butterfly_id in range(self.n_radix_4_butterflies):
-            subtwiddle_len = subfft_len
-            subfft_len *= 4
             self.twiddles.append(
                 np.concatenate((
                     np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j),
@@ -138,10 +150,9 @@ class Myfft:
                     np.exp(np.arange(0, subtwiddle_len, dtype=complex) * 1.5 * np.pi  / subtwiddle_len * -1j)
                 ))
             )
+            subtwiddle_len *= 4
 
-        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
-            subtwiddle_len = subfft_len
-            subfft_len *= 2
+        if (self.using_final_radix_2_butterflies):
             self.twiddles.append (
                 np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j)
             )
@@ -155,11 +166,34 @@ class Myfft:
             signal = np.conjugate(signal) / len(signal)
 
         work_signal_a = scrambled_signal(self.scrambled_indexes, signal)
-        work_signal_b = work_signal_a.copy()
+        work_signal_b = 0. * work_signal_a
 
         subfft_len = 1
         n_subfft_len = self.signal_len
         twiddle_id = 0
+
+        if self.dft_len != 1:
+
+            subfft_len *= self.dft_len
+            n_subfft_len //= self.dft_len
+
+            dft_start_id = 0
+            for subfft_id in range(n_subfft_len):
+                a_id = dft_start_id
+                for dft_basis_id in range(self.dft_len):
+                    b_id = dft_start_id
+                    for dft_factor_id in range(self.dft_len):
+                        work_signal_b[b_id] += (
+                            work_signal_a[a_id]
+                            *  self.dft_mat[dft_basis_id][dft_factor_id]
+                        )
+                        b_id += 1
+                    a_id += 1
+
+                dft_start_id += subfft_len
+
+            work_signal_a = work_signal_b
+            work_signal_b = work_signal_a.copy()
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             subtwiddle_len = subfft_len
@@ -172,6 +206,11 @@ class Myfft:
             d_id = 3 * subtwiddle_len
 
             for subfft_id in range(n_subfft_len):
+
+                a_id = subfft_id * subfft_len
+                b_id = subtwiddle_len + a_id
+                c_id = 2 * subtwiddle_len + a_id
+                d_id = 3 * subtwiddle_len + a_id
 
                 # Multiply in place
                 twiddle_start_id = subfft_id*subfft_len + subtwiddle_len
@@ -226,16 +265,11 @@ class Myfft:
                     c_id += 1
                     d_id += 1
 
-                a_id += subfft_len - subtwiddle_len
-                b_id += subfft_len - subtwiddle_len
-                c_id += subfft_len - subtwiddle_len
-                d_id += subfft_len - subtwiddle_len
-
             twiddle_id += 1
 
         #end for
 
-        if (self.n_radix_2_butterflies != 2 * self.n_radix_4_butterflies):
+        if (self.using_final_radix_2_butterflies):
             subtwiddle_len = subfft_len
             subfft_len *= 2
             n_subfft_len //= 2
@@ -309,6 +343,6 @@ class Myfft:
 sig_len =  2 ** 15
 r = random_complex(sig_len)
 f = fft(r)
-myfft = Myfft(sig_len)
+myfft = Myfft(sig_len, 4)
 m = myfft.process(r)
 print(np.average(np.abs(f-m)), "f-m")
