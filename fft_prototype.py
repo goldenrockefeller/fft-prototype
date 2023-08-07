@@ -16,6 +16,9 @@ def flatten_complex_signal(complex_signal):
 
     return signal
 
+def swap_axes(x):
+    return np.conjugate(x) * 1j
+
 def random_complex(size):
     real = np.random.random(size)
     imaj = np.random.random(size)
@@ -83,11 +86,11 @@ def scrambled_indexes(n_indexes):
 
     return the_scrambled_indexes
 
-def scrambled_signal(scrambled_indexes, signal):
+def scrambled_signal(scrambled_indexes, signal, scale_factor):
     new_signal = signal.copy()
 
     for new_index, old_index in enumerate(scrambled_indexes):
-        new_signal[new_index] = signal[old_index]
+        new_signal[new_index] = scale_factor * signal[old_index]
 
     return new_signal
 
@@ -130,6 +133,7 @@ class Myfft:
         self.twiddles = []
         subtwiddle_len = dft_len
 
+
         self.dft_len = dft_len
 
         self.dft_mat = []
@@ -138,14 +142,13 @@ class Myfft:
         for dft_basis_id in range(dft_len):
             dft_factor = self.dft_scrambled_indexes[dft_basis_id]
             self.dft_mat.append(
-                np.exp(np.arange(0, dft_len, dtype=complex) * 2 * np.pi * dft_factor / dft_len * -1j),
+                np.exp(np.arange(0, dft_len, dtype=complex) * 2  * np.pi * dft_factor / dft_len * -1j),
             )
-
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             self.twiddles.append(
                 np.concatenate((
-                    np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j),
+                    np.exp(np.arange(0, subtwiddle_len, dtype=complex) *np.pi / subtwiddle_len * -1j),
                     np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / 2 / subtwiddle_len * -1j),
                     np.exp(np.arange(0, subtwiddle_len, dtype=complex) * 1.5 * np.pi  / subtwiddle_len * -1j)
                 ))
@@ -157,15 +160,19 @@ class Myfft:
                 np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j)
             )
 
-
         self.scrambled_indexes = scrambled_indexes(signal_len)
         self.signal_len = signal_len
 
     def process(self, signal, calculating_inverse = False):
         if calculating_inverse:
-            signal = np.conjugate(signal) / len(signal)
+            signal = swap_axes(signal)
 
-        work_signal_a = scrambled_signal(self.scrambled_indexes, signal)
+        scale_factor = 1
+
+        if calculating_inverse:
+            scale_factor =  1/self.signal_len
+
+        work_signal_a = scrambled_signal(self.scrambled_indexes, signal, scale_factor)
         work_signal_b = 0. * work_signal_a
 
         subfft_len = 1
@@ -173,7 +180,6 @@ class Myfft:
         twiddle_id = 0
 
         if self.dft_len != 1:
-
             subfft_len *= self.dft_len
             n_subfft_len //= self.dft_len
 
@@ -335,14 +341,14 @@ class Myfft:
             # twiddle_id += 1
 
         if calculating_inverse:
-            work_signal_a = np.conjugate(work_signal_a)
+            work_signal_a = swap_axes(work_signal_a)
 
         return work_signal_a
 
 
 sig_len =  2 ** 15
 r = random_complex(sig_len)
-f = fft(r)
-myfft = Myfft(sig_len, 4)
-m = myfft.process(r)
+f = ifft(r)
+myfft = Myfft(sig_len, 1)
+m = myfft.process(r, True)
 print(np.average(np.abs(f-m)), "f-m")
