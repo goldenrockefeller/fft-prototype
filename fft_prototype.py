@@ -185,8 +185,11 @@ class Myfft:
 
             dft_start_id = 0
             for subfft_id in range(n_subfft_len):
+
                 a_id = dft_start_id
                 for dft_basis_id in range(self.dft_len):
+                    # dft_basis_id = 0 specialty, = 1 for all
+                     # dft_basis_id = 1 specialty, = real for all
                     b_id = dft_start_id
                     for dft_factor_id in range(self.dft_len):
                         work_signal_b[b_id] += (
@@ -200,6 +203,7 @@ class Myfft:
 
             work_signal_a = work_signal_b
             work_signal_b = work_signal_a.copy()
+
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             subtwiddle_len = subfft_len
@@ -221,7 +225,9 @@ class Myfft:
                 # Multiply in place
                 twiddle_start_id = subfft_id*subfft_len + subtwiddle_len
                 end_id = subfft_id*subfft_len + 4 * subtwiddle_len
-                work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
+
+                if subtwiddle_len!= 1:
+                    work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
 
                 for i in range(subtwiddle_len):
 
@@ -346,9 +352,9 @@ class Myfft:
         return work_signal_a
 
 
-sig_len =  2 ** 15
+sig_len =  8
 r = random_complex(sig_len)
 f = ifft(r)
-myfft = Myfft(sig_len, 1)
+myfft = Myfft(sig_len, 8)
 m = myfft.process(r, True)
 print(np.average(np.abs(f-m)), "f-m")
