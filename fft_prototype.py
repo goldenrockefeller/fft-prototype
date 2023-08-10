@@ -179,6 +179,7 @@ class Myfft:
         n_subfft_len = self.signal_len
         twiddle_id = 0
 
+        #specialty
         if self.dft_len != 1:
             subfft_len *= self.dft_len
             n_subfft_len //= self.dft_len
@@ -226,6 +227,7 @@ class Myfft:
                 twiddle_start_id = subfft_id*subfft_len + subtwiddle_len
                 end_id = subfft_id*subfft_len + 4 * subtwiddle_len
 
+                # specialty
                 if subtwiddle_len!= 1:
                     work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
 
