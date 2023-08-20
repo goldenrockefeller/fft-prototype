@@ -86,6 +86,23 @@ def scrambled_indexes(n_indexes):
 
     return the_scrambled_indexes
 
+def br_scrambled_indexes(n_indexes):
+    the_scrambled_indexes = list(range(0, n_indexes))
+
+    n_bits = int(np.log2(n_indexes))
+
+    for i in range(n_indexes):
+        work = the_scrambled_indexes[i]
+        br_index = 0
+        for bit_id in range(n_bits):
+            br_index = br_index << 1;
+            br_index += work & 1
+            work = work >> 1;
+        the_scrambled_indexes[i] = br_index
+
+    return the_scrambled_indexes
+
+
 def scrambled_signal(scrambled_indexes, signal, scale_factor):
     new_signal = signal.copy()
 
@@ -177,34 +194,36 @@ class Myfft:
 
         subfft_len = 1
         n_subfft_len = self.signal_len
-        twiddle_id = 0
+
 
         #specialty
         if self.dft_len != 1:
             subfft_len *= self.dft_len
             n_subfft_len //= self.dft_len
 
-            dft_start_id = 0
+            a_id = 0
+            bb_id = 0
             for subfft_id in range(n_subfft_len):
-
-                a_id = dft_start_id
                 for dft_basis_id in range(self.dft_len):
                     # dft_basis_id = 0 specialty, = 1 for all
                      # dft_basis_id = 1 specialty, = real for all
-                    b_id = dft_start_id
+                    b_id = bb_id
+                    M = work_signal_a[a_id]
+                    dft_basis = self.dft_mat[dft_basis_id]
                     for dft_factor_id in range(self.dft_len):
                         work_signal_b[b_id] += (
-                            work_signal_a[a_id]
-                            *  self.dft_mat[dft_basis_id][dft_factor_id]
+                            M
+                            *  dft_basis[dft_factor_id]
                         )
                         b_id += 1
                     a_id += 1
+                bb_id += self.dft_len
 
-                dft_start_id += subfft_len
 
             work_signal_a = work_signal_b
             work_signal_b = work_signal_a.copy()
 
+        twiddle_id = 0
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             subtwiddle_len = subfft_len
@@ -354,9 +373,9 @@ class Myfft:
         return work_signal_a
 
 
-sig_len =  8
+sig_len =  16
 r = random_complex(sig_len)
 f = ifft(r)
-myfft = Myfft(sig_len, 8)
+myfft = Myfft(sig_len,4)
 m = myfft.process(r, True)
 print(np.average(np.abs(f-m)), "f-m")
