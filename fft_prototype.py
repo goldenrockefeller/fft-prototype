@@ -92,7 +92,7 @@ def br_scrambled_indexes(n_indexes):
     n_bits = int(np.log2(n_indexes))
 
     for i in range(n_indexes):
-        work = the_scrambled_indexes[i]
+        work = i
         br_index = 0
         for bit_id in range(n_bits):
             br_index = br_index << 1;
@@ -133,11 +133,56 @@ def dft(signal):
     for i in range(signal_len):
         spectra += (
             signal[i]
-            * np.exp(np.arange(0, signal_len, dtype=complex) * 2 * np.pi * i / signal_len * -1j)
+            * myexpe(np.arange(0, signal_len, dtype=float) * 2 * i / signal_len)
         )
 
     return spectra
 
+def rem2(x):
+    return x - np.floor(x/2) * 2
+
+def quarter_sin(x):
+    x = rem2(x)
+
+    x = (x <= 0.5) * x + (0.5 < x) * (x <= 1.5) * (1- x) - (x > 1.5) * (2 - x)
+    return x;
+
+def quarter_cos(x):
+    x = rem2(x)
+
+    x = (x <= 1) * x + (x > 1) * (2 - x)
+    return x;
+
+
+def myexpq(x):
+    return np.cos(np.pi * quarter_cos(x)) - np.sin(np.pi * quarter_sin(x)) * 1j
+
+def esin(x):
+    return -ecos(x+0.5)
+
+def ecos(x):
+    x = rem2(x)
+
+    y = 0. * x
+
+    y += (x < 0.25) * np.cos(np.pi * x)
+    y += (x >= 0.25) * (x < 0.75) * np.sin(np.pi * (0.5 - x))
+    y += (x >= 0.75) * (x < 1.25) * - np.cos(np.pi * (1-x))
+    y += (x >= 1.25) * (x < 1.75) * np.sin(np.pi * (x-1.5))
+    y += (x >= 1.75) * np.cos(np.pi * (2-x))
+
+    return y
+
+def myexpr(x):
+    return np.cos(np.pi * rem2(x)) - np.sin(np.pi * rem2(x)) * 1j
+
+def myexpx(x):
+    return np.cos(np.pi * x) - np.sin(np.pi * x) * 1j
+
+def myexpe(x):
+    return ecos(x) - esin(x) * 1j
+
+myexp = myexpe
 
 class Myfft:
     def __init__(self, signal_len, dft_len = 1):
@@ -159,22 +204,22 @@ class Myfft:
         for dft_basis_id in range(dft_len):
             dft_factor = self.dft_scrambled_indexes[dft_basis_id]
             self.dft_mat.append(
-                np.exp(np.arange(0, dft_len, dtype=complex) * 2  * np.pi * dft_factor / dft_len * -1j),
+                myexp(np.arange(0, dft_len, dtype=float) * 2 * dft_factor / dft_len),
             )
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             self.twiddles.append(
                 np.concatenate((
-                    np.exp(np.arange(0, subtwiddle_len, dtype=complex) *np.pi / subtwiddle_len * -1j),
-                    np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / 2 / subtwiddle_len * -1j),
-                    np.exp(np.arange(0, subtwiddle_len, dtype=complex) * 1.5 * np.pi  / subtwiddle_len * -1j)
+                    myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
+                    myexp(np.arange(0, subtwiddle_len, dtype=float) / 2 / subtwiddle_len),
+                    myexp(np.arange(0, subtwiddle_len, dtype=float) * 1.5 / subtwiddle_len )
                 ))
             )
             subtwiddle_len *= 4
 
         if (self.using_final_radix_2_butterflies):
             self.twiddles.append (
-                np.exp(np.arange(0, subtwiddle_len, dtype=complex) * np.pi / subtwiddle_len * -1j)
+                myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len)
             )
 
         self.scrambled_indexes = scrambled_indexes(signal_len)
@@ -195,7 +240,6 @@ class Myfft:
         subfft_len = 1
         n_subfft_len = self.signal_len
 
-
         #specialty
         if self.dft_len != 1:
             subfft_len *= self.dft_len
@@ -206,7 +250,7 @@ class Myfft:
             for subfft_id in range(n_subfft_len):
                 for dft_basis_id in range(self.dft_len):
                     # dft_basis_id = 0 specialty, = 1 for all
-                     # dft_basis_id = 1 specialty, = real for all
+                    # dft_basis_id = 1 specialty, = real for all
                     b_id = bb_id
                     M = work_signal_a[a_id]
                     dft_basis = self.dft_mat[dft_basis_id]
@@ -251,7 +295,6 @@ class Myfft:
                     work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
 
                 for i in range(subtwiddle_len):
-
                     # First butterfly.
                     work_signal_b[a_id] = (
                         work_signal_a[a_id]
@@ -373,9 +416,20 @@ class Myfft:
         return work_signal_a
 
 
-sig_len =  16
+
+
+sig_len =  2 ** 13
+
 r = random_complex(sig_len)
-f = ifft(r)
-myfft = Myfft(sig_len,4)
-m = myfft.process(r, True)
+
+for k in range(0, sig_len, 2):
+    r[k] = (k//2) + ((k//2) & 1)*1.j
+    r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
+
+
+f = dft(r)
+myfft = Myfft(sig_len,1)
+m = myfft.process(r, False)
+
 print(np.average(np.abs(f-m)), "f-m")
+print(myexp.__name__)
