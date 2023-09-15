@@ -102,7 +102,6 @@ def br_scrambled_indexes(n_indexes):
 
     return the_scrambled_indexes
 
-
 def scrambled_signal(scrambled_indexes, signal, scale_factor):
     new_signal = signal.copy()
 
@@ -418,7 +417,7 @@ class Myfft:
 
 
 
-sig_len =  2 ** 13
+sig_len =  2**20
 
 r = random_complex(sig_len)
 
@@ -427,9 +426,9 @@ for k in range(0, sig_len, 2):
     r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
 
 
-f = dft(r)
+f = fft(r)
 myfft = Myfft(sig_len,1)
 m = myfft.process(r, False)
 
-print(np.average(np.abs(f-m)), "f-m")
+print(np.max(np.abs(f-m)), "f-m")
 print(myexp.__name__)
