@@ -110,6 +110,10 @@ def scrambled_signal(scrambled_indexes, signal, scale_factor):
 
     return new_signal
 
+def br_permute(signal):
+    the_scrambled_indexes = br_scrambled_indexes(len(signal))
+    return scrambled_signal(the_scrambled_indexes, signal, 1.)
+
 def test1(a, b, n):
     rotor1 = np.exp(np.arange(0, n, dtype=complex)* 2* np.pi / n * -1j)
     rotor2 = np.exp(np.arange(0, n, dtype=complex)* 2* np.pi / n * 1j)
@@ -200,11 +204,18 @@ class Myfft:
         self.dft_mat = []
         self.dft_scrambled_indexes = scrambled_indexes(dft_len)
 
+        self.dft_mat_t = []
+
+
         for dft_basis_id in range(dft_len):
             dft_factor = self.dft_scrambled_indexes[dft_basis_id]
             self.dft_mat.append(
                 myexp(np.arange(0, dft_len, dtype=float) * 2 * dft_factor / dft_len),
             )
+            self.dft_mat_t.append(
+                    myexp(np.array(scrambled_indexes(dft_len)) * 2. * dft_basis_id / dft_len),
+            )
+
 
         for butterfly_id in range(self.n_radix_4_butterflies):
             self.twiddles.append(
@@ -224,16 +235,23 @@ class Myfft:
         self.scrambled_indexes = scrambled_indexes(signal_len)
         self.signal_len = signal_len
 
-    def process(self, signal, calculating_inverse = False):
+    def process(self, signal, calculating_inverse = False, bit_reversal = True):
         if calculating_inverse:
             signal = swap_axes(signal)
 
         scale_factor = 1
 
+
+
+        work_signal_a = signal.copy()
+
         if calculating_inverse:
             scale_factor =  1/self.signal_len
+            work_signal_a = scale_factor * work_signal_a
 
-        work_signal_a = scrambled_signal(self.scrambled_indexes, signal, scale_factor)
+        if bit_reversal:
+            work_signal_a = scrambled_signal(self.scrambled_indexes, work_signal_a, 1.)
+
         work_signal_b = 0. * work_signal_a
 
         subfft_len = 1
@@ -378,36 +396,171 @@ class Myfft:
                 a_id += 1
                 b_id += 1
 
-            # for subfft_id in range(n_subfft_len): #range(1) for last butterfly
-            #     # Multiply in place
-            #     twiddle_start_id =  subfft_id*subfft_len + subtwiddle_len
-            #     end_id =   subfft_id*subfft_len + 2 * subtwiddle_len
-            #     work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
-            #
-            #     for i in range(subtwiddle_len):
-            #
-            #         # First butterfly.
-            #         work_signal_b[a_id] = (
-            #             work_signal_a[a_id]
-            #             + work_signal_a[b_id]
-            #         )
-            #
-            #         work_signal_b[b_id] = (
-            #             work_signal_a[a_id]
-            #             - work_signal_a[b_id]
-            #         )
-            #
-            #         work_signal_a[a_id] = work_signal_b[a_id]
-            #         work_signal_a[b_id] = work_signal_b[b_id]
-            #
-            #
-            #         a_id += 1
-            #         b_id += 1
-            #
-            #     a_id += subfft_len - subtwiddle_len
-            #     b_id += subfft_len - subtwiddle_len
-            #
-            # twiddle_id += 1
+
+        if calculating_inverse:
+            work_signal_a = swap_axes(work_signal_a)
+
+        return work_signal_a
+
+    def process_dif(self, signal, calculating_inverse = False, bit_reversal = True):
+        if calculating_inverse:
+            signal = swap_axes(signal)
+
+        scale_factor = 1
+
+        if calculating_inverse:
+            scale_factor =  1/self.signal_len
+            work_signal_a = scale_factor * work_signal_a
+
+        work_signal_a = signal.copy()
+        work_signal_b = 0. * work_signal_a
+
+        subfft_len = self.signal_len
+        n_subfft_len = 1
+
+        twiddle_id =  len(self.twiddles) - 1
+
+        if (self.using_final_radix_2_butterflies):
+            subtwiddle_len = subfft_len // 2
+
+            a_id = 0
+            b_id = subtwiddle_len
+
+            for i in range(subtwiddle_len):
+
+                # First butterfly.
+                work_signal_b[a_id] = (
+                    work_signal_a[a_id]
+                    + work_signal_a[b_id]
+                )
+
+                work_signal_b[b_id] = (
+                    work_signal_a[a_id]
+                    - work_signal_a[b_id]
+                )
+
+                work_signal_a[a_id] = work_signal_b[a_id]
+                work_signal_a[b_id] = work_signal_b[b_id]
+
+
+                a_id += 1
+                b_id += 1
+
+            # Multiply in place
+            twiddle_start_id =  subtwiddle_len
+            end_id =   2 * subtwiddle_len
+            work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
+
+            subfft_len //= 2
+            n_subfft_len *= 2
+            twiddle_id -= 1
+
+        for butterfly_id in reversed(range(self.n_radix_4_butterflies)):  #Notice reversed
+            subtwiddle_len = subfft_len // 4
+
+            a_id = 0
+            b_id = subtwiddle_len
+            c_id = 2 * subtwiddle_len
+            d_id = 3 * subtwiddle_len
+
+            for subfft_id in range(n_subfft_len):
+
+                a_id = subfft_id * subfft_len
+                b_id = subtwiddle_len + a_id
+                c_id = 2 * subtwiddle_len + a_id
+                d_id = 3 * subtwiddle_len + a_id
+
+                for i in range(subtwiddle_len):
+
+                    # notice switch with work_signal_b and butterfly
+
+                    # Second butterfly.
+                    work_signal_b[a_id] = (
+                        work_signal_a[a_id]
+                        + work_signal_a[c_id]
+                    )
+
+                    work_signal_b[b_id] = (
+                        work_signal_a[b_id]
+                        + work_signal_a[d_id] # notice change
+                    )
+
+                    work_signal_b[c_id] = (
+                        work_signal_a[a_id]
+                        - work_signal_a[c_id]
+                    )
+
+                    work_signal_b[d_id] = (
+                        -1j * work_signal_a[b_id] # notice change
+                        + 1j * work_signal_a[d_id]
+                    )
+
+
+                    # First butterfly.
+                    work_signal_a[a_id] = (
+                        work_signal_b[a_id]
+                        + work_signal_b[b_id]
+                    )
+
+                    work_signal_a[b_id] = (
+                        work_signal_b[a_id]
+                        - work_signal_b[b_id]
+                    )
+                    work_signal_a[c_id] = (
+                        work_signal_b[c_id]
+                        + work_signal_b[d_id]
+                    )
+                    work_signal_a[d_id] = (
+                        work_signal_b[c_id]
+                        - work_signal_b[d_id]
+                    )
+
+                    a_id += 1
+                    b_id += 1
+                    c_id += 1
+                    d_id += 1
+
+                # Multiply in place
+                twiddle_start_id = subfft_id*subfft_len + subtwiddle_len
+                end_id = subfft_id*subfft_len + 4 * subtwiddle_len
+
+                # specialty
+                if subtwiddle_len!= 1:
+                    work_signal_a[twiddle_start_id : end_id] *= self.twiddles[twiddle_id]
+
+            twiddle_id -= 1
+            subfft_len //= 4
+            n_subfft_len *= 4
+
+        #specialty
+        if self.dft_len != 1:
+            a_id = 0
+            bb_id = 0
+            for subfft_id in range(n_subfft_len):
+                b_id = bb_id
+                for dft_factor_id in range(self.dft_len):
+                    work_signal_b[b_id] = 0.
+                    b_id += 1
+                for dft_basis_id in range(self.dft_len):
+                    # dft_basis_id = 0 specialty, = 1 for all
+                    # dft_basis_id = self.dft_len/2 specialty, = 1 for all
+                    b_id = bb_id
+                    M = work_signal_a[a_id]
+                    dft_basis = self.dft_mat_t[dft_basis_id]
+                    for dft_factor_id in range(self.dft_len):
+                        work_signal_b[b_id] += (
+                            M
+                            *  dft_basis[dft_factor_id]
+                        )
+                        b_id += 1
+                    a_id += 1
+                bb_id += self.dft_len
+
+            work_signal_a = work_signal_b
+            work_signal_b = work_signal_a.copy()
+
+        if bit_reversal:
+            work_signal_a = scrambled_signal(self.scrambled_indexes, work_signal_a, 1.)
 
         if calculating_inverse:
             work_signal_a = swap_axes(work_signal_a)
@@ -415,20 +568,33 @@ class Myfft:
         return work_signal_a
 
 
+sig_len =  64
+
+a = random_complex(sig_len)
+b = random_complex(sig_len)
+
+# for k in range(0, sig_len, 2):
+#     r[k] = (k//2) + ((k//2) & 1)*1.j
+#     r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
+
+myfft = Myfft(sig_len,8)
+def mfft(r):
+    return myfft.process(r, False)
+
+def mifft(r):
+    return myfft.process(r, True)
+
+def mfft_nb(r):
+    return myfft.process_dif(r, False, True)
+
+def mifft_nb(r):
+    return myfft.process(r, True, True)
+
+f = ifft(fft(a) * fft(b))
+m1 = mifft(mfft(a) * mfft(b))
+m2 = mifft_nb(mfft_nb(a) * mfft_nb(b))
 
 
-sig_len =  2**20
+print(np.max(np.abs(f-m1)), "f-m1")
+print(np.max(np.abs(f-m2)), "f-m2")
 
-r = random_complex(sig_len)
-
-for k in range(0, sig_len, 2):
-    r[k] = (k//2) + ((k//2) & 1)*1.j
-    r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
-
-
-f = fft(r)
-myfft = Myfft(sig_len,1)
-m = myfft.process(r, False)
-
-print(np.max(np.abs(f-m)), "f-m")
-print(myexp.__name__)
