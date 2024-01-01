@@ -64,6 +64,7 @@ def my_rfft(signal):
 
 
     the_complement_spectra = complement_spectra(combined_spectra) # work
+    print(the_complement_spectra)
     rotor = np.exp(np.arange(0, N//2, dtype=complex) * np.pi * 2 / N * -1j) # save
     spectra = np.zeros(N//2 + 1, dtype = complex)
 
