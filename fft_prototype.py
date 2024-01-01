@@ -37,19 +37,45 @@ def complement_spectra(spectra):
 
     return complement
 
+def complement_spectra_2(spectra):
+    # spectra len is even
+    spectra_len = len(spectra);
+    half_spectra_len = (spectra_len) // 2
+
+    complement = spectra * 0.
+
+    complement[0] = spectra[0]
+    complement[half_spectra_len] =  spectra[half_spectra_len]
+
+    for i in range(1, half_spectra_len):
+        complement[i]  = spectra[spectra_len-i]
+        complement[spectra_len-i] = spectra[i]
+
+    return complement
+
 def my_rfft(signal):
     N = len(signal)
     even_signal = signal[::2]
     odd_signal = signal[1::2]
-    combined_signal =  make_complex_array(even_signal, odd_signal)
+    combined_signal =  make_complex_array(even_signal, odd_signal) # work
+
     combined_spectra = fft(combined_signal)
-    the_complement_spectra = complement_spectra(combined_spectra)
-    rotor = np.exp(np.arange(0, N//2, dtype=complex) * np.pi * 2 / N * -1j)
-    even_spectra = 0.5 * (combined_spectra + the_complement_spectra)
-    odd_spectra = -0.5j * (combined_spectra - the_complement_spectra)
+    print(combined_spectra)
+
+
+    the_complement_spectra = complement_spectra(combined_spectra) # work
+    rotor = np.exp(np.arange(0, N//2, dtype=complex) * np.pi * 2 / N * -1j) # save
     spectra = np.zeros(N//2 + 1, dtype = complex)
-    spectra[:N//2] = even_spectra + odd_spectra*rotor
-    spectra[N//2] = (even_spectra[0].real - odd_spectra[0].real)
+
+    spectra[:N//2] = 0.5 * (
+        (combined_spectra + the_complement_spectra)
+         - 1j *  (combined_spectra - the_complement_spectra) * rotor
+    )
+    #spectra[:N//2] = even_spectra + odd_spectra*rotor #the even spectra
+    spectra[N//2] = (
+        (0.5 * (combined_spectra[0].real + the_complement_spectra[0].real))
+        - (0.5 * (combined_spectra[0].imag - the_complement_spectra[0].imag))
+        )
     return spectra
 
 def my_irfft(spectra):
@@ -68,7 +94,12 @@ def my_irfft(spectra):
     # Notice the even_spectra[0], even_spectra[N//4] ,
     # odd_spectra[0], odd_spectra[N//4] are all real numbers
     combined_spectra = even_spectra + 1j * odd_spectra
+
+
+    print(combined_spectra)
     combined_signal = ifft(combined_spectra)
+
+
     signal = flatten_complex_signal(combined_signal)
     return signal
 
