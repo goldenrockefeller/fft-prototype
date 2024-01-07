@@ -84,17 +84,26 @@ def my_irfft(spectra):
     compact_spectra = np.zeros(N//2, dtype=complex)
     compact_spectra[:N//2] = spectra[:N//2]
     compact_spectra[0] += 1j * spectra[N//2]
+    ampl_at_zero_freq = spectra[0]
+    ampl_at_nyquist_freq = spectra[N//2]
+
+
+    print(compact_spectra)
+
     the_complement_spectra = complement_spectra(compact_spectra)
     rotor = np.exp(np.arange(0, N//2, dtype=complex) * np.pi * 2 / N * 1j)
     even_spectra = 0.5 * (compact_spectra + the_complement_spectra)
     odd_spectra = 0.5 * ( compact_spectra - the_complement_spectra) * rotor
-    ampl_at_zero_freq = even_spectra[0]
-    ampl_at_nyquist_freq = -1j * odd_spectra[0]
     even_spectra[0] = 0.5 * (ampl_at_zero_freq + ampl_at_nyquist_freq)
     odd_spectra[0] = 0.5 * (ampl_at_zero_freq - ampl_at_nyquist_freq)
     # Notice the even_spectra[0], even_spectra[N//4] ,
     # odd_spectra[0], odd_spectra[N//4] are all real numbers
     combined_spectra = even_spectra + 1j * odd_spectra
+
+    compact_spectra[0] =  (
+        0.5 * (ampl_at_zero_freq + ampl_at_nyquist_freq)
+        + 0.5j * (ampl_at_zero_freq - ampl_at_nyquist_freq)
+    )
 
 
     print(combined_spectra)
