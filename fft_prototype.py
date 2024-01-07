@@ -87,7 +87,6 @@ def my_irfft(spectra):
     ampl_at_zero_freq = spectra[0]
     ampl_at_nyquist_freq = spectra[N//2]
 
-
     print(compact_spectra)
 
     the_complement_spectra = complement_spectra(compact_spectra)
