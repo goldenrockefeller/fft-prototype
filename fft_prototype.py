@@ -126,6 +126,25 @@ def scrambled_indexes(n_indexes):
 
     return the_scrambled_indexes
 
+def scrambled_flip(signal):
+    start_id = 2
+    section_len = 2
+    new_signal = [0] * len(signal)
+    new_signal[0] = signal[0]
+    new_signal[1] = signal[1]
+    while start_id < len(signal):
+        a = start_id
+        b = start_id + section_len - 1
+        for i in range(section_len):
+            new_signal[a] = signal[b]
+            a += 1
+            b -= 1
+        start_id += section_len
+        section_len = section_len << 1
+    return new_signal
+
+
+
 def br_scrambled_indexes(n_indexes):
     the_scrambled_indexes = list(range(0, n_indexes))
 
@@ -255,6 +274,9 @@ class Myfft:
             self.dft_mat_t.append(
                     myexp(np.array(scrambled_indexes(dft_len)) * 2. * dft_basis_id / dft_len),
             )
+
+        print(self.dft_mat)
+        print(self.dft_mat_t)
 
 
         for butterfly_id in range(self.n_radix_4_butterflies):
@@ -458,7 +480,9 @@ class Myfft:
         subfft_len = self.signal_len
         n_subfft_len = 1
 
-        twiddle_id =  len(self.twiddles) - 1
+        twiddle_id =  len(self.twiddles) - 1 # TODODIF
+
+        print("copy", work_signal_a)
 
         if (self.using_final_radix_2_butterflies):
             subtwiddle_len = subfft_len // 2
@@ -494,6 +518,8 @@ class Myfft:
             subfft_len //= 2
             n_subfft_len *= 2
             twiddle_id -= 1
+
+        print("copy", work_signal_a)
 
         for butterfly_id in reversed(range(self.n_radix_4_butterflies)):  #Notice reversed
             subtwiddle_len = subfft_len // 4
@@ -572,6 +598,37 @@ class Myfft:
             subfft_len //= 4
             n_subfft_len *= 4
 
+        print("copy", work_signal_a)
+
+        # #specialty
+        # if self.dft_len != 1:
+        #     subfft_len *= self.dft_len
+        #     n_subfft_len //= self.dft_len
+        #
+        #     a_id = 0
+        #     bb_id = 0
+        #     for subfft_id in range(n_subfft_len):
+        #         for dft_basis_id in range(self.dft_len):
+        #             # dft_basis_id = 0 specialty, = 1 for all
+        #             # dft_basis_id = 1 specialty, = real for all
+        #             b_id = bb_id
+        #             M = work_signal_a[a_id]
+        #             dft_basis = self.dft_mat[dft_basis_id]
+        #             for dft_factor_id in range(self.dft_len):
+        #                 work_signal_b[b_id] += (
+        #                     M
+        #                     *  dft_basis[dft_factor_id]
+        #                 )
+        #                 b_id += 1
+        #             a_id += 1
+        #         bb_id += self.dft_len
+        #
+        #
+        #     work_signal_a = work_signal_b
+        #     work_signal_b = work_signal_a.copy()
+        #
+        # twiddle_id = 0
+
         #specialty
         if self.dft_len != 1:
             a_id = 0
@@ -583,7 +640,7 @@ class Myfft:
                     b_id += 1
                 for dft_basis_id in range(self.dft_len):
                     # dft_basis_id = 0 specialty, = 1 for all
-                    # dft_basis_id = self.dft_len/2 specialty, = 1 for all
+                    # dft_basis_id = self.dft_len/2 specialty, = real for all
                     b_id = bb_id
                     M = work_signal_a[a_id]
                     dft_basis = self.dft_mat_t[dft_basis_id]
@@ -608,16 +665,17 @@ class Myfft:
         return work_signal_a
 
 
-sig_len =  64
+sig_len =  8
 
 a = random_complex(sig_len)
 b = random_complex(sig_len)
 
-# for k in range(0, sig_len, 2):
-#     r[k] = (k//2) + ((k//2) & 1)*1.j
-#     r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
+r = random_complex(sig_len)
+for k in range(0, sig_len, 2):
+    r[k] = (k//2) + ((k//2) & 1)*1.j
+    r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
 
-myfft = Myfft(sig_len,8)
+myfft = Myfft(sig_len,1)
 def mfft(r):
     return myfft.process(r, False)
 
@@ -630,11 +688,12 @@ def mfft_nb(r):
 def mifft_nb(r):
     return myfft.process(r, True, True)
 
-f = ifft(fft(a) * fft(b))
-m1 = mifft(mfft(a) * mfft(b))
-m2 = mifft_nb(mfft_nb(a) * mfft_nb(b))
+# f = ifft(fft(a) * fft(b))
+# m1 = mifft(mfft(a) * mfft(b))
+# m2 = mifft_nb(mfft_nb(a) * mfft_nb(b))
+myfft.process_dif(r)
 
-
-print(np.max(np.abs(f-m1)), "f-m1")
-print(np.max(np.abs(f-m2)), "f-m2")
+#
+# print(np.max(np.abs(f-m1)), "f-m1")
+# print(np.max(np.abs(f-m2)), "f-m2")
 
