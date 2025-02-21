@@ -1,4 +1,5 @@
 import numpy as np
+from enum import Enum, auto
 from scipy.fft import rfft, irfft, fft, ifft
 
 # Real fft by http://www.robinscheibler.org/2013/02/13/real-fft.html
@@ -204,6 +205,461 @@ def dft(signal):
         )
 
     return spectra
+#
+# bit_reversed_indexes = scrambled_indexes(64)
+# for i in range(4):
+#     print(
+#
+#         f"q0_real = Operand::load_unaligned(in_real + {4*i});",
+#         f"q1_real = Operand::load_unaligned(in_real + {4*i+16});",
+#         f"q2_real = Operand::load_unaligned(in_real + {4*i+32});",
+#         f"q3_real = Operand::load_unaligned(in_real + {4*i+18});",
+#
+#         f"q0_imag = Operand::load_unaligned(in_imag + {4*i});",
+#         f"q1_imag = Operand::load_unaligned(in_imag + {4*i+16});",
+#         f"q2_imag = Operand::load_unaligned(in_imag + {4*i+32});",
+#         f"q3_imag = Operand::load_unaligned(in_imag + {4*i+18});",
+#
+#         f"p0_real = xsimd::zip_lo(q0_real, q1_real);",
+#         f"p1_real = xsimd::zip_hi(q0_real, q1_real);",
+#         f"p2_real = xsimd::zip_lo(q2_real, q3_real);",
+#         f"p3_real = xsimd::zip_hi(q2_real, q3_real);",
+#
+#         f"p0_imag = xsimd::zip_lo(q0_imag, q1_imag);",
+#         f"p1_imag = xsimd::zip_hi(q0_imag, q1_imag);",
+#         f"p2_imag = xsimd::zip_lo(q2_imag, q3_imag);",
+#         f"p3_imag = xsimd::zip_hi(q2_imag, q3_imag);",
+#
+#         f"r0_real = xsimd::zip_lo(p0_real, p2_real);",
+#         f"r1_real = xsimd::zip_hi(p0_real, p2_real);",
+#         f"r2_real = xsimd::zip_lo(p1_real, p3_real);",
+#         f"r3_real = xsimd::zip_hi(p1_real, p3_real);",
+#
+#         f"r0_imag = xsimd::zip_lo(p0_imag, p2_imag);",
+#         f"r1_imag = xsimd::zip_hi(p0_imag, p2_imag);",
+#         f"r2_imag = xsimd::zip_lo(p1_imag, p3_imag);",
+#         f"r3_imag = xsimd::zip_hi(p1_imag, p3_imag);",
+#
+#         f"r0_real.store_unaligned(out_real + {bit_reversed_indexes[4*i]});",
+#         f"r1_real.store_unaligned(out_real + {bit_reversed_indexes[4*i + 1]});",
+#         f"r2_real.store_unaligned(out_real + {bit_reversed_indexes[4*i + 2]});",
+#         f"r3_real.store_unaligned(out_real + {bit_reversed_indexes[4*i + 3]});",
+#
+#         f"r0_imag.store_unaligned(out_imag + {bit_reversed_indexes[4*i]});",
+#         f"r1_imag.store_unaligned(out_imag + {bit_reversed_indexes[4*i + 1]});",
+#         f"r2_imag.store_unaligned(out_imag + {bit_reversed_indexes[4*i + 2]});",
+#         f"r3_imag.store_unaligned(out_imag + {bit_reversed_indexes[4*i + 3]});",
+#         sep="\n"
+#     )
+
+# Transposing Bitreversal:
+# [ ] How does it compare in speed to COBRA?
+# [-] Construct indexes as a matrix (or two if matrix is rectangular
+# [-] Bit reverse permute the rows
+# [-] Recursive transpose to spit out load and store orders
+# [ ] Use a counter to determine how many times off-diagonal transposes with happen
+# [ ] Have a templated method for transposition.
+
+def get_indexes_as_mats(n_indexes):
+    n_bits = int(np.log2(n_indexes))
+
+    if n_bits % 2 == 0:
+        # This is a square matrix
+        n_rows = 1 << (n_bits // 2)
+        mat = []
+        for row_id in range(n_rows):
+            row = [0] * n_rows
+            for col_id in range(n_rows):
+                row[col_id] = row_id * n_rows + col_id
+            mat.append(row)
+        return [mat]
+
+    else:
+        # This is a rectangular matrix
+        n_rows = 1 << ((n_bits - 1) // 2)
+        mat_a = []
+        mat_b = []
+        for row_id in range(n_rows):
+            row_a = [0] * n_rows
+            row_b = [0] * n_rows
+            for col_id in range(n_rows):
+                row_a[col_id] = row_id * 2 * n_rows + col_id
+                row_b[col_id] = row_id * 2 * n_rows + col_id + n_rows
+            mat_a.append(row_a)
+            mat_b.append(row_b)
+        return [mat_a, mat_b]
+
+def bit_rev_permute_rows(mat):
+    n_rows = len(mat)
+    new_mat = []
+
+    scrambled_rows = scrambled_indexes(n_rows)
+
+    for row_id in range(n_rows):
+        new_mat.append(mat[scrambled_rows[row_id]])
+
+    return new_mat
+
+def corner(mat, quarter_row, quater_col):
+
+    new_n_rows = len(mat) // 2
+
+    new_mat = []
+
+    for row_id in range(new_n_rows):
+        old_row = mat[new_n_rows * quarter_row + row_id]
+        new_row = []
+        for col_id in range(new_n_rows):
+            new_row.append(old_row[new_n_rows * quater_col + col_id])
+        new_mat.append(new_row)
+
+    return new_mat
+
+def transpose_diagonal_indexes(mat, base_size):
+    if len(mat) == base_size:
+        destinations = []
+        for row_id in range(base_size):
+            destinations.append(mat[row_id][0])
+        return [[destinations, destinations]]
+
+    destinations = []
+    destinations.extend(transpose_diagonal_indexes(corner(mat,0,0), base_size))
+    destinations.extend(
+        transpose_off_diagonal_indexes(
+            corner(mat,0,1),
+            corner(mat,1,0),
+            base_size
+        )
+    )
+    destinations.extend(transpose_diagonal_indexes(corner(mat,1,1), base_size))
+    return destinations
+
+def transpose_off_diagonal_indexes(mat_a, mat_b, base_size):
+    if len(mat_a) == base_size:
+        destinations_a = []
+        destinations_b = []
+        for row_id in range(base_size):
+            destinations_a.append(mat_a[row_id][0])
+            destinations_b.append(mat_b[row_id][0])
+        return [[destinations_a, destinations_b]]
+
+    destinations = []
+    destinations.extend(
+        transpose_off_diagonal_indexes(
+            corner(mat_a,0,0),
+            corner(mat_b,0,0),
+            base_size
+        )
+    )
+    destinations.extend(
+        transpose_off_diagonal_indexes(
+            corner(mat_a,0,1),
+            corner(mat_b,1,0),
+            base_size
+        )
+    )
+    destinations.extend(
+        transpose_off_diagonal_indexes(
+            corner(mat_a,1,0),
+            corner(mat_b,0,1),
+            base_size
+        )
+    )
+    destinations.extend(
+        transpose_off_diagonal_indexes(
+            corner(mat_a,1,1),
+            corner(mat_b,1,1),
+            base_size
+        )
+    )
+    return destinations
+
+def get_off_diagonal_streaks(transpose_pairs):
+    streaks = []
+    counter = 0
+    for pair in transpose_pairs:
+        if pair[0][0] == pair[1][0]:
+            if counter != 0:
+                if counter != 1:
+                    streaks.append(counter)
+                counter = 0
+        else:
+            counter += 1
+
+    return streaks
+
+def print_mat(mat):
+    print(np.array(mat))
+
+class PlanType(Enum):
+    N_INDEXES_BASE_SIZE_SQR = auto()
+    N_INDEXES_2_BASE_SIZE_SQR = auto()
+    N_INDEXES_4_BASE_SIZE_SQR = auto()
+    N_INDEXES_8_BASE_SIZE_SQR = auto()
+    MAT_IS_SQUARE = auto()
+    MAT_IS_NONSQUARE = auto()
+
+
+class BitRevPermPlan:
+    type : PlanType
+    plan_indexes : list[int]
+    off_diagonal_streak_lens = list[int]
+
+
+def get_bit_rev_perm_plan(n_indexes, base_size):
+    n_bits = int(np.log2(n_indexes))
+
+    mat_is_square = n_bits % 2 == 0
+
+    plan = BitRevPermPlan()
+
+    if n_indexes ==  base_size * base_size:
+        plan.type = PlanType.N_INDEXES_BASE_SIZE_SQR
+
+    elif n_indexes ==  2* base_size * base_size:
+        plan.type = PlanType.N_INDEXES_2_BASE_SIZE_SQR
+
+    elif n_indexes ==  4* base_size * base_size:
+        plan.type = PlanType.N_INDEXES_4_BASE_SIZE_SQR
+
+    elif n_indexes ==  8* base_size * base_size:
+        plan.type = PlanType.N_INDEXES_8_BASE_SIZE_SQR
+
+
+    elif mat_is_square:
+        plan.type = PlanType.MAT_IS_SQUARE
+
+    else:
+        plan.type = PlanType.MAT_IS_NONSQUARE
+
+    mats = get_indexes_as_mats(n_indexes)
+
+
+
+    pre_plans_indexes = []
+
+    for mat in mats:
+        mat = bit_rev_permute_rows(mat)
+        pre_plans_indexes.append(transpose_diagonal_indexes(mat, base_size))
+
+    off_diagonal_streak_lens = get_off_diagonal_streaks(pre_plans_indexes[0])
+
+    plan_indexes = []
+
+    # Compress diagonal
+
+    pair_id = 0
+
+    for pre_plan in pre_plans_indexes:
+        for j in range(base_size):
+            plan_indexes.append(pre_plan[pair_id][0][j])
+
+    pair_id += 1
+
+    if n_indexes ==  base_size * base_size or n_indexes ==  2* base_size * base_size:
+        plan.plan_indexes = plan_indexes
+        plan.off_diagonal_streak_lens = []
+        return plan
+
+    for pre_plan in pre_plans_indexes:
+        for j in range(base_size):
+            plan_indexes.append(pre_plan[pair_id][0][j])
+        for j in range(base_size):
+            plan_indexes.append(pre_plan[pair_id][1][j])
+
+    pair_id += 1
+
+    for pre_plan in pre_plans_indexes:
+        for j in range(base_size):
+            plan_indexes.append(pre_plan[pair_id][0][j])
+
+    pair_id += 1
+
+    for streak_len in off_diagonal_streak_lens:
+        for off_diagonal_id in range(streak_len):
+            for pre_plan in pre_plans_indexes:
+                for j in range(base_size):
+                    plan_indexes.append(pre_plan[pair_id][0][j])
+                for j in range(base_size):
+                    plan_indexes.append(pre_plan[pair_id][1][j])
+            pair_id += 1
+
+        for pre_plan in pre_plans_indexes:
+            for j in range(base_size):
+                plan_indexes.append(pre_plan[pair_id][0][j])
+
+        pair_id += 1
+
+        for pre_plan in pre_plans_indexes:
+            for j in range(base_size):
+                plan_indexes.append(pre_plan[pair_id][0][j])
+            for j in range(base_size):
+                plan_indexes.append(pre_plan[pair_id][1][j])
+
+        pair_id += 1
+
+        for pre_plan in pre_plans_indexes:
+            for j in range(base_size):
+                plan_indexes.append(pre_plan[pair_id][0][j])
+
+        pair_id += 1
+
+    plan.plan_indexes = plan_indexes
+    plan.off_diagonal_streak_lens = off_diagonal_streak_lens
+    return plan
+
+
+def data_transpose_diagonal(data, indexes, base_size):
+    for i in range(base_size):
+        for j in range(i + 1, base_size):
+            data[indexes[i] + j], data[indexes[j] + i] = (
+                data[indexes[j] + i], data[indexes[i] + j]
+            )
+
+def data_transpose_off_diagonal(data, indexes0, indexes1, base_size):
+    for i in range(base_size):
+        for j in range(base_size):
+            data[indexes0[i] + j], data[indexes1[j] + i] = (
+                data[indexes1[j] + i], data[indexes0[i] + j]
+            )
+
+
+def transpose_scrambled_indexes(n_indexes, base_size):
+    indexes = list(range(n_indexes))
+
+    plan = get_bitrevperm_plan(n_indexes, base_size)
+    plan_type, plan_indexes, off_diagonal_streak_lens  = plan.plan_indexes, plan.off_diagonal_streak_lens
+
+    transpose_id = 0
+
+    if plan_type is PlanType.N_INDEXES_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes, base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_2_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_4_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[base_size:2*base_size],
+            plan_indexes[2*base_size:3*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[3*base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_8_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[base_size:2*base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[2*base_size:3*base_size],
+            plan_indexes[3*base_size:4*base_size],
+            base_size
+        )
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[4*base_size:5*base_size],
+            plan_indexes[5*base_size:6*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[6*base_size:7*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[7*base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.MAT_IS_SQUARE:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[base_size:2*base_size],
+            plan_indexes[2*base_size:3*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[3*base_size:4*base_size], base_size)
+        transpose_id = 4
+
+        for streak_len in off_diagonal_streak_lens:
+            for off_diagonal_id in range(streak_len):
+                data_transpose_off_diagonal(
+                    indexes,
+                    plan_indexes[transpose_id*base_size:(transpose_id+1)*base_size],
+                    plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                    base_size
+                )
+                transpose_id += 2
+
+            data_transpose_diagonal(indexes, plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size], base_size)
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+                base_size
+            )
+            data_transpose_diagonal(indexes, plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size], base_size)
+
+            transpose_id += 4
+
+        return indexes
+
+    data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+    data_transpose_diagonal(indexes, plan_indexes[base_size:2*base_size], base_size)
+    data_transpose_off_diagonal(
+        indexes,
+        plan_indexes[2*base_size:3*base_size],
+        plan_indexes[3*base_size:4*base_size],
+        base_size
+    )
+    data_transpose_off_diagonal(
+        indexes,
+        plan_indexes[4*base_size:5*base_size],
+        plan_indexes[5*base_size:6*base_size],
+        base_size
+    )
+    data_transpose_diagonal(indexes, plan_indexes[6*base_size:7*base_size], base_size)
+    data_transpose_diagonal(indexes, plan_indexes[7*base_size:8*base_size], base_size)
+    transpose_id = 8
+
+    for streak_len in off_diagonal_streak_lens:
+        for off_diagonal_id in range(streak_len):
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size],
+                plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                base_size
+            )
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+                plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size],
+                base_size
+            )
+            transpose_id += 4
+
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+            plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size],
+            base_size
+        )
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[(transpose_id+4)*base_size:(transpose_id+5)*base_size],
+            plan_indexes[(transpose_id+5)*base_size:(transpose_id+6)*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+6)*base_size:(transpose_id+7)*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+7)*base_size:(transpose_id+8)*base_size], base_size)
+
+        transpose_id += 8
+
+    return indexes
+
 
 def rem2(x):
     return x - np.floor(x/2) * 2
