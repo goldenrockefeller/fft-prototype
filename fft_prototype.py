@@ -793,6 +793,8 @@ def small_fft_2b(signal, small_len = 1):
         )
         subtwiddle_len *= 2
 
+    print(twiddles)
+
     work_signal_a = np.array(signal, dtype = np.complex_)
     work_signal_b = np.array(signal, dtype = np.complex_)
 
@@ -814,7 +816,6 @@ def small_fft_2b(signal, small_len = 1):
                     * twiddles[twiddles_id][tw_b_id]
                 )
 
-
                 work_signal_a[a_id] = (
                     work_signal_b[a_id]
                     + work_signal_b[b_id]
@@ -825,15 +826,10 @@ def small_fft_2b(signal, small_len = 1):
                     - work_signal_b[b_id]
                 )
             if (twiddles_id < len(twiddles) - 1):
-                work_signal_a[i * small_len:(i+1) * small_len] = interleave( work_signal_a[i * small_len:(i+1) * small_len])
+                work_signal_a[i * small_len:(i+1) * small_len] = interleave(work_signal_a[i * small_len:(i+1) * small_len])
         twiddles_id += 1
         subtwiddle_len *= 2
-        print(work_signal_a)
         work_signal_b = work_signal_a * 1.
-
-
-    for i in work_signal_a:
-        print(i)
 
     return work_signal_a
 
@@ -914,6 +910,7 @@ def small_fft_2(signal, small_len = 1):
     work_signal_b = np.array(signal, dtype = np.complex_)
 
     n_small_fft = signal_len // small_len
+    print(twiddles)
 
     subtwiddle_len = 1
     twiddles_id = 0
@@ -939,7 +936,7 @@ def small_fft_2(signal, small_len = 1):
                     - work_signal_b[small_len * i + j + small_len // 2]
                 )
 
-        print(work_signal_a)
+        #print(work_signal_a)
         twiddles_id += 1
         subtwiddle_len *= 2
 
@@ -949,8 +946,8 @@ def small_fft_2(signal, small_len = 1):
     #     work_signal_a = interleave(work_signal_a)
     #     subtwiddle_len*=2
 
-    for i in work_signal_a:
-        print(i)
+    # for i in work_signal_a:
+    #     print(i)
 
     return work_signal_a
 
@@ -958,6 +955,7 @@ def small_fft_2(signal, small_len = 1):
 
 def small_fft_4(signal, small_len = 1):
     signal_len = len(signal)
+    signal =  np.array(signal, dtype = np.complex_)
 
     subtwiddle_len = 1
 
@@ -973,7 +971,7 @@ def small_fft_4(signal, small_len = 1):
                     myexp(np.arange(0, subtwiddle_len, dtype=float) / 2 / subtwiddle_len),
                     myexp(np.arange(0, subtwiddle_len, dtype=float) * 1.5 / subtwiddle_len )
                 )),
-                signal_len // subtwiddle_len // 4
+                small_len // subtwiddle_len // 4
             )
         )
         subtwiddle_len *= 4
@@ -982,7 +980,7 @@ def small_fft_4(signal, small_len = 1):
         twiddles.append (
             extend(
                 myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
-                signal_len // subtwiddle_len // 2
+                small_len // subtwiddle_len // 2
             )
         )
         subtwiddle_len *= 2
@@ -993,117 +991,110 @@ def small_fft_4(signal, small_len = 1):
     subtwiddle_len = 1
     twiddles_id = 0
     while (subtwiddle_len * 4) <= small_len:
-        work_signal_b = deinterleave(work_signal_a)
-        work_signal_a = deinterleave(work_signal_b)
-        work_signal_b = work_signal_a.copy()
-        print(work_signal_b)
-        for i in range(signal_len // 4 // small_len):
-            for j in range(small_len):
+        for i in range(signal_len // small_len):
+            work_signal_b[i*small_len : (i+1)*small_len] = deinterleave(work_signal_a[i*small_len : (i+1)*small_len])
+            work_signal_a[i*small_len : (i+1)*small_len] = deinterleave(work_signal_b[i*small_len : (i+1)*small_len])
+            for j in range(small_len//4):
                 # this part is SIMD parallizable
+
                 a_id = small_len * i + j
-                b_id = small_len * i + j + signal_len // 4
-                c_id = small_len * i + j + signal_len // 2
-                d_id = small_len * i + j + 3 * signal_len // 4
+                b_id = small_len * i + j + small_len // 4
+                c_id = small_len * i + j + small_len // 2
+                d_id = small_len * i + j + 3 * small_len // 4
 
-                tb_id = a_id
-                tc_id = b_id
-                td_id = c_id
+                tb_id = j
+                tc_id = j + small_len // 4
+                td_id = j + small_len // 2
 
-                work_signal_b[b_id] = (
-                    work_signal_b[b_id]
+                work_signal_a[b_id] = (
+                    work_signal_a[b_id]
                     * twiddles[twiddles_id][tb_id]
                 )
 
-                work_signal_b[c_id] = (
-                    work_signal_b[c_id]
+                work_signal_a[c_id] = (
+                    work_signal_a[c_id]
                     * twiddles[twiddles_id][tc_id]
                 )
 
-                work_signal_b[d_id] = (
-                    work_signal_b[d_id]
+                work_signal_a[d_id] = (
+                    work_signal_a[d_id]
                     * twiddles[twiddles_id][td_id]
                 )
 
 
-                work_signal_a[a_id] = ( #done
-                    work_signal_b[a_id]
-                    + work_signal_b[b_id]
+                work_signal_b[a_id] = (
+                    work_signal_a[a_id]
+                    + work_signal_a[b_id]
                 )
 
-                work_signal_a[b_id] = (
-                    work_signal_b[a_id]
-                    - work_signal_b[b_id]
+                work_signal_b[b_id] = (
+                    work_signal_a[a_id]
+                    - work_signal_a[b_id]
                 )
-                work_signal_a[c_id] = ( #done
-                    work_signal_b[c_id]
-                    + work_signal_b[d_id]
+                work_signal_b[c_id] = (
+                    work_signal_a[c_id]
+                    + work_signal_a[d_id]
                 )
-                work_signal_a[d_id] = ( #done
-                    work_signal_b[c_id]
-                    - work_signal_b[d_id]
+                work_signal_b[d_id] = (
+                    work_signal_a[c_id]
+                    - work_signal_a[d_id]
                 )
 
 
                 # Second butterfly.
-                work_signal_b[a_id] = ( #done
-                    work_signal_a[a_id]
-                    + work_signal_a[c_id]
+                work_signal_a[a_id] = (
+                    work_signal_b[a_id]
+                    + work_signal_b[c_id]
                 )
 
-                work_signal_b[b_id] = (
-                    work_signal_a[b_id]
-                    - 1j* work_signal_a[d_id]
+                work_signal_a[b_id] = (
+                    work_signal_b[b_id]
+                    - 1j* work_signal_b[d_id]
                 )
 
-                work_signal_b[c_id] = (
-                    work_signal_a[a_id]
-                    -  work_signal_a[c_id]
+                work_signal_a[c_id] = (
+                    work_signal_b[a_id]
+                    -  work_signal_b[c_id]
                 )
 
-                work_signal_b[d_id] = (
-                    work_signal_a[b_id]
-                    + 1j * work_signal_a[d_id]
+                work_signal_a[d_id] = (
+                    work_signal_b[b_id]
+                    + 1j * work_signal_b[d_id]
                 )
 
-        work_signal_a = work_signal_b
-
+        print("-----")
+        print(work_signal_a)
+        print("-----")
         twiddles_id += 1
         subtwiddle_len *= 4
 
 
 
     while subtwiddle_len < small_len:
-        work_signal_b = deinterleave(work_signal_a)
-        for i in range(signal_len // 2 // small_len):
-            for j in range(small_len):
+
+        for i in range(signal_len // small_len):
+            work_signal_b[i*small_len : (i+1)*small_len] = deinterleave(work_signal_a[i*small_len : (i+1)*small_len])
+            for j in range(small_len//2):
                 # this part is SIMD parallizable
-                work_signal_b[small_len * i + j + signal_len // 2] = (
-                    work_signal_b[small_len * i + j + signal_len // 2]
-                    * twiddles[twiddles_id][small_len * i + j]
+                work_signal_b[small_len * i + j + small_len // 2] = (
+                    work_signal_b[small_len * i + j + small_len // 2]
+                    * twiddles[twiddles_id][j]
                 )
+
 
                 work_signal_a[small_len * i + j] = (
                     work_signal_b[small_len * i + j]
-                    + work_signal_b[small_len * i + j + signal_len // 2]
+                    + work_signal_b[small_len * i + j + small_len // 2]
                 )
 
-                work_signal_a[small_len * i + j + signal_len // 2] = (
+                work_signal_a[small_len * i + j + small_len // 2] = (
                     work_signal_b[small_len * i + j]
-                    - work_signal_b[small_len * i + j + signal_len // 2]
+                    - work_signal_b[small_len * i + j + small_len // 2]
                 )
 
+        #print(work_signal_a)
         twiddles_id += 1
         subtwiddle_len *= 2
-
-
-
-    subtwiddle_len = 1
-    while subtwiddle_len < small_len:
-        work_signal_a = interleave(work_signal_a)
-        subtwiddle_len*=2
-
-    for i in work_signal_a:
-        print(i)
 
     return work_signal_a
 
