@@ -405,6 +405,27 @@ class BitRevPermPlan:
     plan_indexes : list[int]
     off_diagonal_streak_lens = list[int]
 
+def bit_rev_indexes(n_indexes):
+    mats = get_indexes_as_mats(n_indexes)
+
+    in_indexes = []
+    out_indexes = []
+
+    for mat in mats:
+        mat = bit_rev_permute_rows(mat)
+        indexes = transpose_diagonal_indexes(mat, 1)
+        for pair_indexes in indexes:
+            if pair_indexes[0][0] == pair_indexes[1][0]:
+                in_indexes.append(pair_indexes[0][0])
+                out_indexes.append(pair_indexes[0][0])
+            else:
+                in_indexes.append(pair_indexes[1][0])
+                out_indexes.append(pair_indexes[0][0])
+                in_indexes.append(pair_indexes[0][0])
+                out_indexes.append(pair_indexes[1][0])
+
+    return in_indexes, out_indexes
+
 
 def get_bit_rev_perm_plan(n_indexes, base_size):
     n_bits = int(np.log2(n_indexes))
@@ -442,6 +463,7 @@ def get_bit_rev_perm_plan(n_indexes, base_size):
         mat = bit_rev_permute_rows(mat)
         pre_plans_indexes.append(transpose_diagonal_indexes(mat, base_size))
 
+    print(pre_plans_indexes)
     off_diagonal_streak_lens = get_off_diagonal_streaks(pre_plans_indexes[0])
 
     plan_indexes = []
@@ -660,6 +682,141 @@ def transpose_scrambled_indexes(n_indexes, base_size):
 
     return indexes
 
+def transpose_scrambled_indexes(n_indexes, base_size):
+    indexes = list(range(n_indexes))
+
+    plan = get_bitrevperm_plan(n_indexes, base_size)
+    plan_type, plan_indexes, off_diagonal_streak_lens  = plan.plan_indexes, plan.off_diagonal_streak_lens
+
+    transpose_id = 0
+
+    if plan_type is PlanType.N_INDEXES_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes, base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_2_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_4_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[base_size:2*base_size],
+            plan_indexes[2*base_size:3*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[3*base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.N_INDEXES_8_BASE_SIZE_SQR:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[base_size:2*base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[2*base_size:3*base_size],
+            plan_indexes[3*base_size:4*base_size],
+            base_size
+        )
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[4*base_size:5*base_size],
+            plan_indexes[5*base_size:6*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[6*base_size:7*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[7*base_size:], base_size)
+        return indexes
+
+    if plan_type is PlanType.MAT_IS_SQUARE:
+        data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[base_size:2*base_size],
+            plan_indexes[2*base_size:3*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[3*base_size:4*base_size], base_size)
+        transpose_id = 4
+
+        for streak_len in off_diagonal_streak_lens:
+            for off_diagonal_id in range(streak_len):
+                data_transpose_off_diagonal(
+                    indexes,
+                    plan_indexes[transpose_id*base_size:(transpose_id+1)*base_size],
+                    plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                    base_size
+                )
+                transpose_id += 2
+
+            data_transpose_diagonal(indexes, plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size], base_size)
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+                base_size
+            )
+            data_transpose_diagonal(indexes, plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size], base_size)
+
+            transpose_id += 4
+
+        return indexes
+
+    data_transpose_diagonal(indexes, plan_indexes[0:base_size], base_size)
+    data_transpose_diagonal(indexes, plan_indexes[base_size:2*base_size], base_size)
+    data_transpose_off_diagonal(
+        indexes,
+        plan_indexes[2*base_size:3*base_size],
+        plan_indexes[3*base_size:4*base_size],
+        base_size
+    )
+    data_transpose_off_diagonal(
+        indexes,
+        plan_indexes[4*base_size:5*base_size],
+        plan_indexes[5*base_size:6*base_size],
+        base_size
+    )
+    data_transpose_diagonal(indexes, plan_indexes[6*base_size:7*base_size], base_size)
+    data_transpose_diagonal(indexes, plan_indexes[7*base_size:8*base_size], base_size)
+    transpose_id = 8
+
+    for streak_len in off_diagonal_streak_lens:
+        for off_diagonal_id in range(streak_len):
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size],
+                plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size],
+                base_size
+            )
+            data_transpose_off_diagonal(
+                indexes,
+                plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+                plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size],
+                base_size
+            )
+            transpose_id += 4
+
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id)*base_size:(transpose_id+1)*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+1)*base_size:(transpose_id+2)*base_size], base_size)
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[(transpose_id+2)*base_size:(transpose_id+3)*base_size],
+            plan_indexes[(transpose_id+3)*base_size:(transpose_id+4)*base_size],
+            base_size
+        )
+        data_transpose_off_diagonal(
+            indexes,
+            plan_indexes[(transpose_id+4)*base_size:(transpose_id+5)*base_size],
+            plan_indexes[(transpose_id+5)*base_size:(transpose_id+6)*base_size],
+            base_size
+        )
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+6)*base_size:(transpose_id+7)*base_size], base_size)
+        data_transpose_diagonal(indexes, plan_indexes[(transpose_id+7)*base_size:(transpose_id+8)*base_size], base_size)
+
+        transpose_id += 8
+
+    return indexes
 
 def rem2(x):
     return x - np.floor(x/2) * 2
@@ -698,6 +855,17 @@ def ecos(x):
 
 def myexpr(x):
     return np.cos(np.pi * rem2(x)) - np.sin(np.pi * rem2(x)) * 1j
+
+
+
+def real_twiddles(subtwiddle_len, freq):
+    x = np.arange(0, subtwiddle_len, dtype=float) * freq
+    return np.cos(np.pi * x)
+
+def imag_twiddles(subtwiddle_len, freq):
+    x = np.arange(0, subtwiddle_len, dtype=float) * freq
+    return - np.sin(np.pi * x)
+
 
 def myexpx(x):
     return np.cos(np.pi * x) - np.sin(np.pi * x) * 1j
@@ -761,79 +929,6 @@ def every_jump_backward(arr, jump):
     return new_arr
 
 
-def small_fft_2b(signal, small_len = 1):
-    signal_len = len(signal)
-
-    signal =  np.array(signal, dtype = np.complex_)
-
-    scrambled_indexes_ = scrambled_indexes(signal_len)
-    signal = scrambled_signal(scrambled_indexes_, signal, 1.)
-    small_scrambled_indexes_ =  scrambled_indexes(small_len)
-
-
-
-    n_small_fft = signal_len // small_len
-
-    # for i in range(signal_len // small_len):
-    #     mini_signal = signal[small_len * i : small_len * (i + 1)]
-    #     mini_signal = scrambled_signal(small_scrambled_indexes_, mini_signal, 1.)
-    #     signal[small_len * i : small_len * (i + 1)] = mini_signal
-
-    subtwiddle_len = 1
-
-
-
-    twiddles = []
-    while subtwiddle_len < small_len:
-        twiddles.append (
-            repeat(
-                myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
-                small_len // subtwiddle_len // 2
-            )
-        )
-        subtwiddle_len *= 2
-
-    print(twiddles)
-
-    work_signal_a = np.array(signal, dtype = np.complex_)
-    work_signal_b = np.array(signal, dtype = np.complex_)
-
-
-    subtwiddle_len = 1
-    jump = subtwiddle_len // small_len
-    twiddles_id = 0
-    while subtwiddle_len < small_len:
-        for i in range(n_small_fft):
-            for j in range(small_len // 2):
-                # this part is SIMD parallizable
-                a_id = i * small_len + j
-                b_id = i * small_len + j + small_len // 2
-
-                tw_b_id = j
-
-                work_signal_b[b_id] = (
-                    work_signal_b[b_id]
-                    * twiddles[twiddles_id][tw_b_id]
-                )
-
-                work_signal_a[a_id] = (
-                    work_signal_b[a_id]
-                    + work_signal_b[b_id]
-                )
-
-                work_signal_a[b_id] = (
-                    work_signal_b[a_id]
-                    - work_signal_b[b_id]
-                )
-            if (twiddles_id < len(twiddles) - 1):
-                work_signal_a[i * small_len:(i+1) * small_len] = interleave(work_signal_a[i * small_len:(i+1) * small_len])
-        twiddles_id += 1
-        subtwiddle_len *= 2
-        work_signal_b = work_signal_a * 1.
-
-    return work_signal_a
-
-
 def prepare_radix4(size, base_len, signal, spectrum, stride, signal_start = 0, spectrum_start = 0):
     if size == base_len:
         for i in range(size):
@@ -887,6 +982,330 @@ def autobit_reverse(n):
 
 #prepare_radix4(64,2,inp,out,1)
 
+def interleave_x(slice_a, slice_b, stride):
+    cp_a = slice_a.copy()
+    cp_b = slice_b.copy()
+    slice_len = len(slice_a)
+
+    for i in range(slice_len // stride // 2):
+        for j in range(stride):
+            slice_a[stride * i * 2  + j] = cp_a[i * stride + j]
+        for j in range(stride):
+            slice_a[stride * i * 2 + j + stride] = cp_b[i * stride + j]
+
+    for i in range(slice_len // stride // 2):
+        for j in range(stride):
+            slice_b[stride * i * 2  + j] = cp_a[slice_len // 2 + i * stride + j]
+        for j in range(stride):
+            slice_b[stride * i * 2 + j + stride] = cp_b[slice_len // 2 + i * stride + j]
+
+
+def interleave_x4(slice_a, slice_b, slice_c, slice_d, stride):
+    cp_a = slice_a.copy()
+    cp_b = slice_b.copy()
+    cp_c = slice_c.copy()
+    cp_d = slice_d.copy()
+    slice_len = len(slice_a)
+
+    if slice_len == 2:
+        slice_a[0] = slice_a[0]
+        slice_a[1] = slice_b[0]
+        slice_b[0] = slice_c[0]
+        slice_b[1] = slice_d[0]
+        slice_c[0] = slice_a[1]
+        slice_c[1] = slice_b[1]
+        slice_d[0] = slice_c[1]
+        slice_d[1] = slice_d[1]
+        return
+
+    for i in range(slice_len // stride // 4):
+        for j in range(stride):
+            slice_a[stride * i * 2  + j] = cp_a[i * stride + j]
+            slice_a[stride * i * 2 + j + stride] = cp_b[i * stride + j]
+            slice_a[stride * i * 2 + j + 2 * stride] = cp_c[i * stride + j]
+            slice_a[stride * i * 2 + j + 3 * stride] = cp_d[i * stride + j]
+
+    offset = slice_len // 4
+    for i in range(slice_len // stride // 4):
+        for j in range(stride):
+            slice_b[stride * i * 2  + j] = cp_a[offset + i * stride + j]
+            slice_b[stride * i * 2 + j + stride] = cp_b[offset + i * stride + j]
+            slice_b[stride * i * 2 + j + 2 * stride] = cp_c[offset + i * stride + j]
+            slice_b[stride * i * 2 + j + 3 * stride] = cp_d[offset + i * stride + j]
+
+    offset = slice_len // 2
+    for i in range(slice_len // stride // 4):
+        for j in range(stride):
+            slice_c[stride * i * 2  + j] = cp_a[offset + i * stride + j]
+            slice_c[stride * i * 2 + j + stride] = cp_b[offset + i * stride + j]
+            slice_c[stride * i * 2 + j + 2 * stride] = cp_c[offset + i * stride + j]
+            slice_c[stride * i * 2 + j + 3 * stride] = cp_d[offset + i * stride + j]
+
+    offset = 3 * slice_len // 4
+    for i in range(slice_len // stride // 4):
+        for j in range(stride):
+            slice_d[stride * i * 2  + j] = cp_a[offset + i * stride + j]
+            slice_d[stride * i * 2 + j + stride] = cp_b[offset + i * stride + j]
+            slice_d[stride * i * 2 + j + 2 * stride] = cp_c[offset + i * stride + j]
+            slice_d[stride * i * 2 + j + 3 * stride] = cp_d[offset + i * stride + j]
+
+def radix_2_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddle, subtwiddle_len, out_indexes = None, in_indexes = None):
+    for id in range(signal_len // op_size // 2):
+        #not conv
+        if out_indexes is not None:
+            out_index = out_indexes[id]
+            in_index = in_indexes[id]
+        else:
+            out_index = id
+            in_index = id
+
+        box_size = op_size * 2;
+
+        b_begin_0 = out_index * box_size
+        b_end_0 = b_begin_0 + op_size
+        b_begin_1 = b_end_0
+        b_end_1 =  b_begin_1 + op_size
+
+        a_begin_0 = in_index * op_size
+        a_end_0 = a_begin_0 + op_size
+        a_begin_1 = in_index * op_size + (signal_len // 2)
+        a_end_1 = a_begin_1 + op_size
+
+        # optimize no twiddle on first
+        work_signal_a[a_begin_1 : a_end_1] *= twiddle
+
+        work_signal_b[b_begin_0 : b_end_0] = (
+            work_signal_a[a_begin_0 : a_end_0]
+            + work_signal_a[a_begin_1 : a_end_1]
+        )
+
+        work_signal_b[b_begin_1 : b_end_1] = (
+            work_signal_a[a_begin_0 : a_end_0]
+            - work_signal_a[a_begin_1 : a_end_1]
+        )
+
+        if out_indexes is None:
+            interleave_x(
+                work_signal_b[b_begin_0 : b_end_0],
+                work_signal_b[b_begin_1 : b_end_1],
+                subtwiddle_len
+            )
+
+def radix_4_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddle_1, twiddle_2, twiddle_3, subtwiddle_len, out_indexes = None, in_indexes = None):
+    for id in range(signal_len // op_size // 4):
+        #not conv
+        if out_indexes is not None:
+            out_index = out_indexes[id]
+            in_index = in_indexes[id]
+        else:
+            out_index = id
+            in_index = id
+
+        box_size = op_size * 4;
+
+        b_begin_0 = out_index * box_size
+        b_end_0 = b_begin_0 + op_size
+        b_begin_1 = b_end_0
+        b_end_1 =  b_begin_1 + op_size
+        b_begin_2 = b_end_1
+        b_end_2 =  b_begin_2 + op_size
+        b_begin_3 = b_end_2
+        b_end_3 =  b_begin_3 + op_size
+
+        a_begin_0 = in_index * op_size
+        a_end_0 = a_begin_0 + op_size
+        a_begin_1 = in_index * op_size + (signal_len // 2)
+        a_end_1 = a_begin_1 + op_size
+        a_begin_2 = in_index * op_size + (signal_len // 4)
+        a_end_2 = a_begin_2 + op_size
+        a_begin_3 = in_index * op_size + (3 * signal_len // 4)
+        a_end_3 = a_begin_3 + op_size
+
+        # optimize no twiddle on first
+        work_signal_b[b_begin_0 : b_end_0] = work_signal_a[a_begin_0 : a_end_0]
+        work_signal_b[b_begin_1 : b_end_1] = work_signal_a[a_begin_1 : a_end_1] * twiddle_1
+        work_signal_b[b_begin_2 : b_end_2] = work_signal_a[a_begin_2 : a_end_2] * twiddle_2
+        work_signal_b[b_begin_3 : b_end_3] = work_signal_a[a_begin_3 : a_end_3] * twiddle_3
+
+
+        work_signal_a[a_begin_0 : a_end_0] = (
+            work_signal_b[b_begin_0 : b_end_0]
+            + work_signal_b[b_begin_1 : b_end_1]
+        )
+
+        work_signal_a[a_begin_1 : a_end_1] = (
+            work_signal_b[b_begin_0 : b_end_0]
+            - work_signal_b[b_begin_1 : b_end_1]
+        )
+        work_signal_a[a_begin_2 : a_end_2] = (
+            work_signal_b[b_begin_2 : b_end_2]
+            + work_signal_b[b_begin_3 : b_end_3]
+        )
+        work_signal_a[a_begin_3 : a_end_3] = (
+            work_signal_b[b_begin_2 : b_end_2]
+            - work_signal_b[b_begin_3 : b_end_3]
+        )
+
+
+
+        # Second butterfly.
+        work_signal_b[b_begin_0 : b_end_0] = (
+            work_signal_a[a_begin_0 : a_end_0]
+            + work_signal_a[a_begin_2 : a_end_2]
+        )
+
+        work_signal_b[b_begin_1 : b_end_1] = (
+            work_signal_a[a_begin_1 : a_end_1]
+            - 1j* work_signal_a[a_begin_3 : a_end_3]
+        )
+
+        work_signal_b[b_begin_2 : b_end_2] = (
+            work_signal_a[a_begin_0 :a_end_0]
+            -  work_signal_a[a_begin_2 : a_end_2]
+        )
+
+        work_signal_b[b_begin_3 : b_end_3] = (
+            work_signal_a[a_begin_1 : a_end_1]
+            + 1j * work_signal_a[a_begin_3 : a_end_3]
+        )
+
+
+        if out_indexes is None:
+            interleave_x4(
+                work_signal_b[b_begin_0 : b_end_0],
+                work_signal_b[b_begin_1 : b_end_1],
+                work_signal_b[b_begin_2 : b_end_2],
+                work_signal_b[b_begin_3 : b_end_3],
+                subtwiddle_len
+            )
+
+def small_fft_2b(signal, op_size = 1):
+    signal_len = len(signal)
+    signal =  np.array(signal, dtype = np.complex_)
+
+    subtwiddle_len = 1
+
+    twiddles = []
+    while subtwiddle_len < op_size:
+        twiddles.append (
+            repeat(
+                myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
+                op_size // subtwiddle_len
+            )
+        )
+        subtwiddle_len *= 2
+
+    twiddles.append (
+        repeat(
+            myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
+            op_size // subtwiddle_len
+        )
+    )
+    subtwiddle_len *= 2
+
+    in_indexes, out_indexes = bit_rev_indexes(signal_len // op_size // 2)
+
+
+    work_signal_a = np.array(signal, dtype = np.complex_)
+    work_signal_b = np.array(signal, dtype = np.complex_)
+
+    n_small_fft = signal_len // op_size // 2
+
+    subtwiddle_len = 1
+    twiddles_id = 0
+
+    while subtwiddle_len < op_size:
+        radix_2_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id], subtwiddle_len, None, None)
+
+        tmp = work_signal_a
+        work_signal_a = work_signal_b
+        work_signal_b = tmp
+        twiddles_id += 1
+        subtwiddle_len *= 2
+
+    radix_2_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id], subtwiddle_len, out_indexes, in_indexes)
+
+    tmp = work_signal_a
+    work_signal_a = work_signal_b
+    work_signal_b = tmp
+
+    return work_signal_a
+
+def small_fft_4b(signal, op_size = 1):
+
+    signal_len = len(signal)
+    signal =  np.array(signal, dtype = np.complex_)
+
+    subtwiddle_len = 1
+
+    twiddles = []
+
+    while subtwiddle_len * 4 <= op_size :
+        r = op_size // subtwiddle_len
+        twiddles.append([
+            repeat(myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len), r),
+            repeat(myexp(np.arange(0, subtwiddle_len, dtype=float) / 2 / subtwiddle_len), r),
+            repeat(myexp(np.arange(0, subtwiddle_len, dtype=float) * 1.5 / subtwiddle_len), r)
+        ])
+        subtwiddle_len *= 4
+
+
+    if subtwiddle_len < op_size:
+        r = op_size // subtwiddle_len
+        twiddles.append ([
+            repeat(myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len), r)
+        ])
+
+        subtwiddle_len *= 2
+
+    if signal_len >= 4 * op_size:
+        twiddles.append([
+            myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len),
+            myexp(np.arange(0, subtwiddle_len, dtype=float) / 2 / subtwiddle_len),
+            myexp(np.arange(0, subtwiddle_len, dtype=float) * 1.5 / subtwiddle_len)
+        ])
+        in_indexes, out_indexes = bit_rev_indexes(signal_len // op_size // 4)
+    elif signal_len >= 2 * op_size:
+        twiddles.append ([
+            myexp(np.arange(0, subtwiddle_len, dtype=float) / subtwiddle_len)
+        ])
+
+    work_signal_a = np.array(signal, dtype = np.complex_)
+    work_signal_b = np.array(signal, dtype = np.complex_)
+
+    subtwiddle_len = 1
+    twiddles_id = 0
+
+    while subtwiddle_len * 4 <= op_size:
+        radix_4_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id][0], twiddles[twiddles_id][1], twiddles[twiddles_id][2], subtwiddle_len, None, None)
+
+        tmp = work_signal_a
+        work_signal_a = work_signal_b
+        work_signal_b = tmp
+        twiddles_id += 1
+        subtwiddle_len *= 4
+
+    if subtwiddle_len < op_size:
+
+        radix_2_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id][0], subtwiddle_len, None, None)
+
+        tmp = work_signal_a
+        work_signal_a = work_signal_b
+        work_signal_b = tmp
+        twiddles_id += 1
+        subtwiddle_len *= 2
+
+    if signal_len >= 4 * op_size:
+        radix_4_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id][0], twiddles[twiddles_id][1], twiddles[twiddles_id][2], subtwiddle_len, out_indexes, in_indexes)
+    elif signal_len >= 2 * op_size:
+        radix_2_stockham(work_signal_b, work_signal_a, signal_len, op_size, twiddles[twiddles_id][0], subtwiddle_len, None, None)
+
+    tmp = work_signal_a
+    work_signal_a = work_signal_b
+    work_signal_b = tmp
+
+    return work_signal_a
+
 def small_fft_2(signal, small_len = 1):
     signal_len = len(signal)
 
@@ -910,7 +1329,7 @@ def small_fft_2(signal, small_len = 1):
     work_signal_b = np.array(signal, dtype = np.complex_)
 
     n_small_fft = signal_len // small_len
-    print(twiddles)
+    # print(twiddles)
 
     subtwiddle_len = 1
     twiddles_id = 0
@@ -918,6 +1337,7 @@ def small_fft_2(signal, small_len = 1):
 
         for i in range(n_small_fft):
             work_signal_b[i*small_len : (i+1)*small_len] = deinterleave(work_signal_a[i*small_len : (i+1)*small_len])
+
             for j in range(small_len//2):
                 # this part is SIMD parallizable
                 work_signal_b[small_len * i + j + small_len // 2] = (
@@ -985,15 +1405,20 @@ def small_fft_4(signal, small_len = 1):
         )
         subtwiddle_len *= 2
 
+    print(f"{twiddles=}")
+
     work_signal_a = signal
     work_signal_b = signal.copy()
 
     subtwiddle_len = 1
     twiddles_id = 0
+    # print("work_signal_a", work_signal_a)
     while (subtwiddle_len * 4) <= small_len:
         for i in range(signal_len // small_len):
             work_signal_b[i*small_len : (i+1)*small_len] = deinterleave(work_signal_a[i*small_len : (i+1)*small_len])
+            # print("work_signal_b", work_signal_b)
             work_signal_a[i*small_len : (i+1)*small_len] = deinterleave(work_signal_b[i*small_len : (i+1)*small_len])
+            print("work_signal_a", work_signal_a)
             for j in range(small_len//4):
                 # this part is SIMD parallizable
 
@@ -1020,6 +1445,7 @@ def small_fft_4(signal, small_len = 1):
                     work_signal_a[d_id]
                     * twiddles[twiddles_id][td_id]
                 )
+
 
 
                 work_signal_b[a_id] = (
@@ -1061,9 +1487,11 @@ def small_fft_4(signal, small_len = 1):
                     work_signal_b[b_id]
                     + 1j * work_signal_b[d_id]
                 )
+            print("work_signal_a", work_signal_a)
+
 
         print("-----")
-        print(work_signal_a)
+        # print(work_signal_a)
         print("-----")
         twiddles_id += 1
         subtwiddle_len *= 4
@@ -1074,6 +1502,8 @@ def small_fft_4(signal, small_len = 1):
 
         for i in range(signal_len // small_len):
             work_signal_b[i*small_len : (i+1)*small_len] = deinterleave(work_signal_a[i*small_len : (i+1)*small_len])
+            # print("work_signal_b", work_signal_b)
+
             for j in range(small_len//2):
                 # this part is SIMD parallizable
                 work_signal_b[small_len * i + j + small_len // 2] = (
@@ -1081,6 +1511,8 @@ def small_fft_4(signal, small_len = 1):
                     * twiddles[twiddles_id][j]
                 )
 
+            # print("work_signal_b", work_signal_b)
+            for j in range(small_len//2):
 
                 work_signal_a[small_len * i + j] = (
                     work_signal_b[small_len * i + j]
@@ -1521,51 +1953,51 @@ class Myfft:
         return work_signal_a
 
 
-sig_len =  8
-
-a = random_complex(sig_len)
-b = random_complex(sig_len)
-
-r = random_complex(sig_len)
-for k in range(0, sig_len, 2):
-    r[k] = (k//2) + ((k//2) & 1)*1.j
-    r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
-
-myfft = Myfft(sig_len,1)
-def mfft(r):
-    return myfft.process(r, False)
-
-def mifft(r):
-    return myfft.process(r, True)
-
-def mfft_nb(r):
-    return myfft.process_dif(r, False, True)
-
-def mifft_nb(r):
-    return myfft.process(r, True, True)
-
-# f = ifft(fft(a) * fft(b))
-# m1 = mifft(mfft(a) * mfft(b))
-# m2 = mifft_nb(mfft_nb(a) * mfft_nb(b))
-# myfft.process_dif(r)
-n = 32
-s = 8
-(1+0j) * np.array(range(n))
-nn = np.zeros(n)
-nn[8] = 1.
-print("-------------")
-small_fft_2((1+0j) * np.array(range(n)), s)
-
-# print("-------------")
-# small_fft_2b(nn, s)
-
-print("-------------")
-# small_fft_4((1+0j) * np.array(range(n)), s)
-# print("-------------")
-myfft = Myfft(n,s)
-# print("-------------")
-myfft.process((1+0j) * np.array(range(n)))
+# sig_len =  8
 #
-# print(np.max(np.abs(f-m1)), "f-m1")
-# print(np.max(np.abs(f-m2)), "f-m2")
-
+# a = random_complex(sig_len)
+# b = random_complex(sig_len)
+#
+# r = random_complex(sig_len)
+# for k in range(0, sig_len, 2):
+#     r[k] = (k//2) + ((k//2) & 1)*1.j
+#     r[k+1] = -1 - k//2 + ((k//2) & 1)*1.j
+#
+# myfft = Myfft(sig_len,1)
+# def mfft(r):
+#     return myfft.process(r, False)
+#
+# def mifft(r):
+#     return myfft.process(r, True)
+#
+# def mfft_nb(r):
+#     return myfft.process_dif(r, False, True)
+#
+# def mifft_nb(r):
+#     return myfft.process(r, True, True)
+#
+# # f = ifft(fft(a) * fft(b))
+# # m1 = mifft(mfft(a) * mfft(b))
+# # m2 = mifft_nb(mfft_nb(a) * mfft_nb(b))
+# # myfft.process_dif(r)
+# n = 32
+# s = 8
+# (1+0j) * np.array(range(n))
+# nn = np.zeros(n)
+# nn[8] = 1.
+# print("-------------")
+# small_fft_2((1+0j) * np.array(range(n)), s)
+#
+# # print("-------------")
+# # small_fft_2b(nn, s)
+#
+# print("-------------")
+# # small_fft_4((1+0j) * np.array(range(n)), s)
+# # print("-------------")
+# myfft = Myfft(n,s)
+# # print("-------------")
+# myfft.process((1+0j) * np.array(range(n)))
+# #
+# # print(np.max(np.abs(f-m1)), "f-m1")
+# # print(np.max(np.abs(f-m2)), "f-m2")
+#
